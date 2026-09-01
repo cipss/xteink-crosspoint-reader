@@ -17,10 +17,16 @@ FetchContent_Declare(
   GIT_TAG v1.17.0
 )
 
+FetchContent_Declare(
+  arduinojson
+  GIT_REPOSITORY https://github.com/bblanchon/ArduinoJson.git
+  GIT_TAG v7.4.2
+)
+
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
 set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(googletest)
+FetchContent_MakeAvailable(googletest arduinojson)
 
 set(REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
 
@@ -28,6 +34,10 @@ add_library(crosspoint_test_common INTERFACE)
 target_include_directories(crosspoint_test_common INTERFACE
   ${REPO_ROOT}
   ${REPO_ROOT}/lib
+  ${REPO_ROOT}/test/arduino_stubs
+  ${REPO_ROOT}/lib/hal
+  ${REPO_ROOT}/lib/Logging
+  ${arduinojson_SOURCE_DIR}/src
 )
 target_compile_options(crosspoint_test_common INTERFACE
   -Wall
@@ -43,3 +53,4 @@ add_subdirectory(release_json_parser)
 add_subdirectory(differential_rounding)
 add_subdirectory(hyphenation_eval)
 add_subdirectory(utf8_compose)
+add_subdirectory(reader_profiles)
