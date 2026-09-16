@@ -18,7 +18,6 @@ constexpr char MANGA_SETTINGS_PATH[] = "/.crosspoint/x3plus/manga/settings.cfg";
 
 void MangaReaderActivity::onEnter() {
   Activity::onEnter();
-
   archive = std::make_unique<MangaArchive>(archivePath);
   if (!archive->open()) {
     error = true;
@@ -30,11 +29,12 @@ void MangaReaderActivity::onEnter() {
   progress = std::make_unique<MangaProgress>(archive->cachePath());
   uint32_t savedPage = 0;
   pageIndex = (progress->load(savedPage) && savedPage < archive->pageCount()) ? savedPage : 0;
-
   ready = true;
   error = false;
   showControls = false;
   requestUpdate();
+
+  prefetchAdjacent();
 }
 
 void MangaReaderActivity::onExit() {
@@ -50,11 +50,21 @@ void MangaReaderActivity::saveProgress() {
   if (progress) progress->save(static_cast<uint32_t>(pageIndex));
 }
 
+void MangaReaderActivity::prefetchAdjacent() {
+  if (!ready || !archive) return;
+  const auto settings = X3Plus::MangaSettings::load(MANGA_SETTINGS_PATH);
+  if (!settings.prefetchNext || pageIndex + 1 >= archive->pageCount()) return;
+
+  std::string unused;
+  archive->materializePage(pageIndex + 1, unused, renderer.getScreenWidth(), renderer.getScreenHeight());
+}
+
 void MangaReaderActivity::moveNext() {
   if (!ready || archive->pageCount() == 0 || pageIndex + 1 >= archive->pageCount()) return;
   ++pageIndex;
   showControls = false;
   saveProgress();
+  prefetchAdjacent();
   requestUpdate();
 }
 
@@ -149,6 +159,7 @@ void MangaReaderActivity::render(RenderLock&&) {
     renderer.displayBuffer();
     return;
   }
+
   if (!ready || !renderCurrentPage()) {
     renderer.clearScreen();
     renderer.drawCenteredText(UI_12_FONT_ID, renderer.getScreenHeight() / 2, "Loading...");
