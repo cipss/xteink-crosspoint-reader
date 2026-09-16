@@ -39,4 +39,21 @@ Target design:
 - add archive refresh/invalidation when a file changes;
 - add benchmark reporting for decode, render and SD latency.
 
+## Fase 6 — Rendering avanzato e robustezza
+Implemented:
+- Natural page ordering (`page2` before `page10`) while keeping deterministic archive order for ties.
+- ZIP archives are explicitly opened again before page extraction, preventing first-page extraction failures after indexing.
+- Cache directories are created defensively through `/.crosspoint` → `/.crosspoint/x3plus` → manga cache.
+- Render cache filenames include their target dimensions, so changing display mode cannot silently reuse an incompatible decode.
+- `Fit Page`, `Fit Width`, `Fit Height` and `Smart` now produce different decode/render bounds.
+- Adjacent-page prefetch uses the active fit mode, avoiding a second decode when the next page is opened.
+- Corrupt/truncated index entries are rejected instead of being counted as valid pages.
+
+Remaining manga work for the next phase:
+- long-page/webtoon segmentation;
+- double-page/spread mode;
+- cover thumbnails and archive metadata;
+- bounded cache pruning based on reader policy;
+- non-blocking decode/SD jobs and benchmark telemetry.
+
 The X3+ implementation must remain independent from proprietary SnailOS source code.
