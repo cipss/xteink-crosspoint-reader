@@ -46,11 +46,21 @@ void X3PlusLauncherActivity::showPlaceholderFor(const char* appName) {
 void X3PlusLauncherActivity::selectApp() {
   const auto* appList = X3Plus::apps();
   const auto count = X3Plus::appCount();
-
   if (selectorIndex < 0 || static_cast<std::size_t>(selectorIndex) >= count) return;
 
-  const auto& app = appList[selectorIndex];
-  showPlaceholderFor(app.title);
+  const auto id = appList[selectorIndex].id;
+  switch (id) {
+    case X3Plus::AppId::Manga:
+      activityManager.goToMangaLibrary();
+      return;
+    case X3Plus::AppId::Settings:
+      activityManager.goToSettings();
+      return;
+    default:
+      break;
+  }
+
+  showPlaceholderFor(appList[selectorIndex].title);
 }
 
 void X3PlusLauncherActivity::loop() {
@@ -84,7 +94,6 @@ void X3PlusLauncherActivity::render(RenderLock&&) {
   const int pageHeight = renderer.getScreenHeight();
 
   renderer.clearScreen();
-
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, "CrossPoint X3+");
 
   const auto* appList = X3Plus::apps();
@@ -106,12 +115,9 @@ void X3PlusLauncherActivity::render(RenderLock&&) {
       [appList](int index) { return std::string(appList[index].description); },
       [appList](int index) { return iconForApp(appList[index].id); });
 
-  if (showPlaceholder) {
-    GUI.drawPopup(renderer, placeholderMessage.c_str());
-  }
+  if (showPlaceholder) GUI.drawPopup(renderer, placeholderMessage.c_str());
 
   const auto labels = mappedInput.mapLabels("", tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-
   renderer.displayBuffer();
 }
