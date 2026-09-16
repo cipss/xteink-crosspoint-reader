@@ -14,7 +14,28 @@
 
 namespace {
 constexpr char MANGA_SETTINGS_PATH[] = "/.crosspoint/x3plus/manga/settings.cfg";
+constexpr int LARGE_RENDER_DIMENSION = 2048;
+
+void renderBounds(const X3Plus::MangaFitMode mode, const int screenWidth, const int screenHeight, int& maxWidth,
+                  int& maxHeight) {
+  switch (mode) {
+    case X3Plus::MangaFitMode::FitWidth:
+      maxWidth = screenWidth;
+      maxHeight = LARGE_RENDER_DIMENSION;
+      break;
+    case X3Plus::MangaFitMode::FitHeight:
+      maxWidth = LARGE_RENDER_DIMENSION;
+      maxHeight = screenHeight;
+      break;
+    case X3Plus::MangaFitMode::FitPage:
+    case X3Plus::MangaFitMode::Smart:
+    default:
+      maxWidth = screenWidth;
+      maxHeight = screenHeight;
+      break;
+  }
 }
+}  // namespace
 
 void MangaReaderActivity::onEnter() {
   Activity::onEnter();
@@ -55,8 +76,14 @@ void MangaReaderActivity::prefetchAdjacent() {
   const auto settings = X3Plus::MangaSettings::load(MANGA_SETTINGS_PATH);
   if (!settings.prefetchNext || pageIndex + 1 >= archive->pageCount()) return;
 
+  const int screenWidth = renderer.getScreenWidth();
+  const int screenHeight = renderer.getScreenHeight();
+  int maxWidth = screenWidth;
+  int maxHeight = screenHeight;
+  renderBounds(settings.fitMode, screenWidth, screenHeight, maxWidth, maxHeight);
+
   std::string unused;
-  archive->materializePage(pageIndex + 1, unused, renderer.getScreenWidth(), renderer.getScreenHeight());
+  archive->materializePage(pageIndex + 1, unused, maxWidth, maxHeight);
 }
 
 void MangaReaderActivity::moveNext() {
@@ -100,9 +127,14 @@ void MangaReaderActivity::loop() {
 bool MangaReaderActivity::renderCurrentPage() {
   if (!ready || !archive) return false;
 
+  const auto settings = X3Plus::MangaSettings::load(MANGA_SETTINGS_PATH);
   const int screenWidth = renderer.getScreenWidth();
   const int screenHeight = renderer.getScreenHeight();
-  if (!archive->materializePage(pageIndex, currentBmpPath, screenWidth, screenHeight)) {
+  int maxWidth = screenWidth;
+  int maxHeight = screenHeight;
+  renderBounds(settings.fitMode, screenWidth, screenHeight, maxWidth, maxHeight);
+
+  if (!archive->materializePage(pageIndex, currentBmpPath, maxWidth, maxHeight)) {
     error = true;
     errorMessage = "Unable to decode page";
     return false;
@@ -127,18 +159,24 @@ bool MangaReaderActivity::renderCurrentPage() {
   const int imageHeight = bitmap.getHeight();
   renderer.clearScreen();
 
-  int x = 0;
-  int y = 0;
-  int maxWidth = screenWidth;
-  int maxHeight = screenHeight;
-  if (imageWidth <= screenWidth && imageHeight <= screenHeight) {
-    x = (screenWidth - imageWidth) / 2;
-    y = (screenHeight - imageHeight) / 2;
-    maxWidth = imageWidth;
-    maxHeight = imageHeight;
+  int drawX = 0;
+  int drawY = 0;
+  int drawMaxWidth = screenWidth;
+  int drawMaxHeight = screenHeight;
+  if (settings.fitMode == X3Plus::MangaFitMode::FitWidth) {
+    drawMaxWidth = screenWidth;
+    drawMaxHeight = LARGE_RENDER_DIMENSION;
+  } else if (settings.fitMode == X3Plus::MangaFitMode::FitHeight) {
+    drawMaxWidth = LARGE_RENDER_DIMENSION;
+    drawMaxHeight = screenHeight;
+  } else if (imageWidth <= screenWidth && imageHeight <= screenHeight) {
+    drawX = (screenWidth - imageWidth) / 2;
+    drawY = (screenHeight - imageHeight) / 2;
+    drawMaxWidth = imageWidth;
+    drawMaxHeight = imageHeight;
   }
 
-  renderer.drawBitmap(bitmap, x, y, maxWidth, maxHeight);
+  renderer.drawBitmap(bitmap, drawX, drawY, drawMaxWidth, drawMaxHeight);
   file.close();
 
   if (showControls) {
