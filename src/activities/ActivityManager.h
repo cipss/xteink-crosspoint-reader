@@ -36,7 +36,6 @@ class ActivityManager {
   std::unique_ptr<Activity> currentActivity;
 
   void exitActivity(const RenderLock& lock);
-
   std::unique_ptr<Activity> pendingActivity;
   enum class PendingAction { None, Push, Pop, Replace };
   PendingAction pendingAction = PendingAction::None;
@@ -44,7 +43,6 @@ class ActivityManager {
   TaskHandle_t renderTaskHandle = nullptr;
   static void renderTaskTrampoline(void* param);
   [[noreturn]] virtual void renderTaskLoop();
-
   TaskHandle_t waitingTaskHandle = nullptr;
   SemaphoreHandle_t renderingMutex = nullptr;
   bool requestedUpdate = false;
@@ -59,13 +57,15 @@ class ActivityManager {
 
   void begin();
   void loop();
-
   void replaceActivity(std::unique_ptr<Activity>&& newActivity);
 
   void goToFileTransfer();
   void goToX3Plus();
   void goToMangaLibrary();
   void goToMangaReader(std::string path);
+  void goToNotes();
+  void goToCalendar();
+  void goToWeather();
   void goToSettings();
   void goToFileBrowser(std::string path = {});
   void goToRecentBooks();
