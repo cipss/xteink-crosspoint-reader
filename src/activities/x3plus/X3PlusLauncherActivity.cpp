@@ -1,21 +1,33 @@
 #include "X3PlusLauncherActivity.h"
 
 #include "components/UITheme.h"
+#include "x3plus/X3PlusAppRegistry.h"
 
-const std::vector<std::string>& X3PlusLauncherActivity::appNames() {
-  static const std::vector<std::string> apps = {
-      "Manga",
-      "Notes",
-      "Weather",
-      "Calendar",
-      "RSS / News",
-      "Browser",
-      "Games",
-      "X3+ Settings",
-  };
+namespace {
 
-  return apps;
+X3Plus::UIIcon iconForApp(X3Plus::AppId id) {
+  switch (id) {
+    case X3Plus::AppId::Manga:
+      return Book;
+    case X3Plus::AppId::Notes:
+      return Text;
+    case X3Plus::AppId::Weather:
+      return Wifi;
+    case X3Plus::AppId::Calendar:
+      return Library;
+    case X3Plus::AppId::Rss:
+      return Text;
+    case X3Plus::AppId::Browser:
+      return Text;
+    case X3Plus::AppId::Games:
+      return Book;
+    case X3Plus::AppId::Settings:
+      return Settings;
+  }
+  return None;
 }
+
+}  // namespace
 
 void X3PlusLauncherActivity::onEnter() {
   Activity::onEnter();
@@ -25,30 +37,38 @@ void X3PlusLauncherActivity::onEnter() {
   requestUpdate();
 }
 
-void X3PlusLauncherActivity::showPlaceholderFor(const std::string& appName) {
-  placeholderMessage = appName + " - coming soon";
+void X3PlusLauncherActivity::showPlaceholderFor(const char* appName) {
+  placeholderMessage = std::string(appName) + " - coming soon";
   showPlaceholder = true;
   requestUpdate();
 }
 
 void X3PlusLauncherActivity::selectApp() {
-  const auto& apps = appNames();
-  if (selectorIndex >= 0 && selectorIndex < static_cast<int>(apps.size())) {
-    showPlaceholderFor(apps[selectorIndex]);
+  const auto* appList = X3Plus::apps();
+  const auto count = X3Plus::appCount();
+
+  if (selectorIndex < 0 || static_cast<std::size_t>(selectorIndex) >= count) return;
+
+  const auto& app = appList[selectorIndex];
+  if (app.status == X3Plus::AppStatus::Available) {
+    showPlaceholderFor(app.title);
+    return;
   }
+
+  showPlaceholderFor(app.title);
 }
 
 void X3PlusLauncherActivity::loop() {
-  const auto& apps = appNames();
+  const int appCount = static_cast<int>(X3Plus::appCount());
 
-  buttonNavigator.onNext([this, &apps] {
-    selectorIndex = ButtonNavigator::nextIndex(selectorIndex, static_cast<int>(apps.size()));
+  buttonNavigator.onNext([this, appCount] {
+    selectorIndex = ButtonNavigator::nextIndex(selectorIndex, appCount);
     showPlaceholder = false;
     requestUpdate();
   });
 
-  buttonNavigator.onPrevious([this, &apps] {
-    selectorIndex = ButtonNavigator::previousIndex(selectorIndex, static_cast<int>(apps.size()));
+  buttonNavigator.onPrevious([this, appCount] {
+    selectorIndex = ButtonNavigator::previousIndex(selectorIndex, appCount);
     showPlaceholder = false;
     requestUpdate();
   });
@@ -72,7 +92,9 @@ void X3PlusLauncherActivity::render(RenderLock&&) {
 
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, "CrossPoint X3+");
 
-  const auto& apps = appNames();
+  const auto* appList = X3Plus::apps();
+  const auto count = X3Plus::appCount();
+
   const Rect listRect{
       0,
       metrics.topPadding + metrics.headerHeight,
@@ -83,32 +105,11 @@ void X3PlusLauncherActivity::render(RenderLock&&) {
   GUI.drawList(
       renderer,
       listRect,
-      static_cast<int>(apps.size()),
+      static_cast<int>(count),
       selectorIndex,
-      [&apps](int index) { return apps[index]; },
-      nullptr,
-      [](int index) {
-        switch (index) {
-          case 0:
-            return Book;
-          case 1:
-            return Text;
-          case 2:
-            return Wifi;
-          case 3:
-            return Library;
-          case 4:
-            return Text;
-          case 5:
-            return Text;
-          case 6:
-            return Book;
-          case 7:
-            return Settings;
-          default:
-            return None;
-        }
-      });
+      [appList](int index) { return std::string(appList[index].title); },
+      [appList](int index) { return std::string(appList[index].description); },
+      [appList](int index) { return iconForApp(appList[index].id); });
 
   if (showPlaceholder) {
     GUI.drawPopup(renderer, placeholderMessage.c_str());
