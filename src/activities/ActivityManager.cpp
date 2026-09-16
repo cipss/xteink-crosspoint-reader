@@ -22,6 +22,7 @@
 #include "x3plus/calendar/CalendarActivity.h"
 #include "x3plus/manga/MangaLibraryActivity.h"
 #include "x3plus/manga/MangaReaderActivity.h"
+#include "x3plus/manga/MangaSettingsActivity.h"
 #include "x3plus/notes/NotesActivity.h"
 #include "x3plus/weather/WeatherActivity.h"
 
@@ -141,6 +142,10 @@ void ActivityManager::goToMangaReader(std::string path) {
   replaceActivity(std::make_unique<MangaReaderActivity>(renderer, mappedInput, std::move(path)));
 }
 
+void ActivityManager::goToMangaSettings() {
+  replaceActivity(std::make_unique<MangaSettingsActivity>(renderer, mappedInput));
+}
+
 void ActivityManager::goToNotes() {
   replaceActivity(std::make_unique<NotesActivity>(renderer, mappedInput));
 }
@@ -190,19 +195,12 @@ void ActivityManager::goToFullScreenMessage(std::string message, EpdFontFamily::
 void ActivityManager::goHome(HomeMenuItem initialMenuItem) {
   if (initialMenuItem == HomeMenuItem::NONE && currentActivity) {
     const auto& activityName = currentActivity->name;
-    if (activityName == "FileBrowser") {
-      initialMenuItem = HomeMenuItem::FILE_BROWSER;
-    } else if (activityName == "RecentBooks") {
-      initialMenuItem = HomeMenuItem::RECENTS;
-    } else if (activityName == "OpdsBookBrowser") {
-      initialMenuItem = HomeMenuItem::OPDS_BROWSER;
-    } else if (activityName == "CrossPointWebServer") {
-      initialMenuItem = HomeMenuItem::FILE_TRANSFER;
-    } else if (activityName == "Settings") {
-      initialMenuItem = HomeMenuItem::SETTINGS_MENU;
-    } else if (activityName == "X3PlusLauncher") {
-      initialMenuItem = HomeMenuItem::X3PLUS;
-    }
+    if (activityName == "FileBrowser") initialMenuItem = HomeMenuItem::FILE_BROWSER;
+    else if (activityName == "RecentBooks") initialMenuItem = HomeMenuItem::RECENTS;
+    else if (activityName == "OpdsBookBrowser") initialMenuItem = HomeMenuItem::OPDS_BROWSER;
+    else if (activityName == "CrossPointWebServer") initialMenuItem = HomeMenuItem::FILE_TRANSFER;
+    else if (activityName == "Settings") initialMenuItem = HomeMenuItem::SETTINGS_MENU;
+    else if (activityName == "X3PlusLauncher") initialMenuItem = HomeMenuItem::X3PLUS;
   }
   replaceActivity(std::make_unique<HomeActivity>(renderer, mappedInput, initialMenuItem));
 }
