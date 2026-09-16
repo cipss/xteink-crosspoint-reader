@@ -20,6 +20,7 @@ constexpr char INDEX_FILE[] = "index.bin";
 constexpr char TEMP_IMAGE[] = "input.bin";
 constexpr uint32_t FNV_OFFSET = 2166136261u;
 constexpr uint32_t FNV_PRIME = 16777619u;
+constexpr std::size_t INDEX_RESERVE = 256;
 
 uint32_t fnv1a(const std::string& value) {
   uint32_t hash = FNV_OFFSET;
@@ -159,6 +160,7 @@ bool MangaArchive::buildIndex() {
   }
 
   std::vector<std::string> pages;
+  pages.reserve(INDEX_RESERVE);
   bool enumerateOk = zip.enumerateFilePaths([&](std::string_view filePath) {
     if (filePath.empty() || filePath.back() == '/' || filePath.size() > MAX_ENTRY_PATH) return;
     const std::string path(filePath);
