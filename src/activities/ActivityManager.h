@@ -63,6 +63,7 @@ class ActivityManager {
   void goToX3Plus();
   void goToMangaLibrary();
   void goToMangaReader(std::string path);
+  void goToMangaSettings();
   void goToNotes();
   void goToCalendar();
   void goToWeather();
