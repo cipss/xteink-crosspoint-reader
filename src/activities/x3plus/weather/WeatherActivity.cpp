@@ -2,10 +2,13 @@
 
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
+#include <HalStorage.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 
-#include <cstdio>
+#include <algorithm>
+#include <cstdlib>
+#include <cstring>
 #include <string>
 
 #include "components/UITheme.h"
@@ -65,9 +68,10 @@ bool WeatherActivity::fetchWeather() {
   if (!configured || WiFi.status() != WL_CONNECTED) return false;
 
   char url[512];
-  std::snprintf(url, sizeof(url),
-                "%s/v1/forecast?latitude=%.5f&longitude=%.5f&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code&timezone=auto",
-                OPEN_METEO_HOST, latitude, longitude);
+  std::snprintf(
+      url, sizeof(url),
+      "%s/v1/forecast?latitude=%.5f&longitude=%.5f&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code&timezone=auto",
+      OPEN_METEO_HOST, latitude, longitude);
 
   WiFiClientSecure client;
   client.setInsecure();
@@ -85,9 +89,7 @@ bool WeatherActivity::fetchWeather() {
   http.end();
 
   JsonDocument doc;
-  const auto err = deserializeJson(doc, payload);
-  if (err) return false;
-
+  if (deserializeJson(doc, payload)) return false;
   const auto current = doc["current"];
   if (current.isNull()) return false;
 
@@ -120,6 +122,7 @@ void WeatherActivity::onEnter() {
   statusMessage.clear();
   configured = loadConfig();
   loading = false;
+  if (configured && WiFi.status() == WL_CONNECTED) fetchWeather();
   requestUpdate();
 }
 
