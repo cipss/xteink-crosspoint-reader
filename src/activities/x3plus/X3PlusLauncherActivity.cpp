@@ -5,7 +5,7 @@
 
 namespace {
 
-X3Plus::UIIcon iconForApp(X3Plus::AppId id) {
+UIIcon iconForApp(X3Plus::AppId id) {
   switch (id) {
     case X3Plus::AppId::Manga:
       return Book;
@@ -50,11 +50,6 @@ void X3PlusLauncherActivity::selectApp() {
   if (selectorIndex < 0 || static_cast<std::size_t>(selectorIndex) >= count) return;
 
   const auto& app = appList[selectorIndex];
-  if (app.status == X3Plus::AppStatus::Available) {
-    showPlaceholderFor(app.title);
-    return;
-  }
-
   showPlaceholderFor(app.title);
 }
 
