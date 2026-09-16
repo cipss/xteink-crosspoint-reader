@@ -11,6 +11,7 @@
 #include <cctype>
 #include <cstdio>
 #include <cstring>
+#include <vector>
 
 namespace {
 constexpr uint16_t MAX_ENTRY_PATH = 65500;
@@ -40,6 +41,50 @@ bool extensionEquals(const std::string& path, const char* ext) {
     }
   }
   return true;
+}
+
+bool naturalLess(const std::string& lhs, const std::string& rhs) {
+  std::size_t i = 0;
+  std::size_t j = 0;
+  while (i < lhs.size() && j < rhs.size()) {
+    const unsigned char left = static_cast<unsigned char>(lhs[i]);
+    const unsigned char right = static_cast<unsigned char>(rhs[j]);
+
+    if (std::isdigit(left) && std::isdigit(right)) {
+      std::size_t leftEnd = i;
+      std::size_t rightEnd = j;
+      while (leftEnd < lhs.size() && std::isdigit(static_cast<unsigned char>(lhs[leftEnd]))) ++leftEnd;
+      while (rightEnd < rhs.size() && std::isdigit(static_cast<unsigned char>(rhs[rightEnd]))) ++rightEnd;
+
+      std::size_t leftValue = i;
+      while (leftValue < leftEnd && lhs[leftValue] == '0') ++leftValue;
+      std::size_t rightValue = j;
+      while (rightValue < rightEnd && rhs[rightValue] == '0') ++rightValue;
+
+      const std::size_t leftDigits = leftEnd - leftValue;
+      const std::size_t rightDigits = rightEnd - rightValue;
+      if (leftDigits != rightDigits) return leftDigits < rightDigits;
+      if (lhs.compare(leftValue, leftDigits, rhs, rightValue, rightDigits) != 0) {
+        return lhs.compare(leftValue, leftDigits, rhs, rightValue, rightDigits) < 0;
+      }
+
+      const std::size_t leftZeros = leftValue - i;
+      const std::size_t rightZeros = rightValue - j;
+      if (leftZeros != rightZeros) return leftZeros < rightZeros;
+
+      i = leftEnd;
+      j = rightEnd;
+      continue;
+    }
+
+    const char lc = static_cast<char>(std::tolower(left));
+    const char rc = static_cast<char>(std::tolower(right));
+    if (lc != rc) return lc < rc;
+    ++i;
+    ++j;
+  }
+
+  return lhs.size() < rhs.size();
 }
 }  // namespace
 
@@ -83,6 +128,8 @@ bool MangaArchive::isImagePath(const std::string& path) {
 }
 
 bool MangaArchive::ensureCacheDirectory() {
+  if (!Storage.exists("/.crosspoint")) Storage.mkdir("/.crosspoint");
+  if (!Storage.exists("/.crosspoint/x3plus")) Storage.mkdir("/.crosspoint/x3plus");
   if (!Storage.exists(CACHE_ROOT) && !Storage.mkdir(CACHE_ROOT)) {
     LOG_ERR("MANGA", "Failed to create cache root");
     return false;
@@ -111,25 +158,33 @@ bool MangaArchive::buildIndex() {
     return false;
   }
 
-  pageCount_ = 0;
-  bool writeOk = true;
-  const bool enumerateOk = zip.enumerateFilePaths([&](std::string_view filePath) {
-    if (!writeOk || filePath.empty() || filePath.back() == '/' || filePath.size() > MAX_ENTRY_PATH) return;
-
+  std::vector<std::string> pages;
+  bool enumerateOk = zip.enumerateFilePaths([&](std::string_view filePath) {
+    if (filePath.empty() || filePath.back() == '/' || filePath.size() > MAX_ENTRY_PATH) return;
     const std::string path(filePath);
-    if (!isImagePath(path)) return;
+    if (isImagePath(path)) pages.push_back(path);
+  });
+  zip.close();
 
+  if (!enumerateOk || pages.empty()) {
+    index.close();
+    return false;
+  }
+
+  std::stable_sort(pages.begin(), pages.end(), naturalLess);
+
+  pageCount_ = 0;
+  for (const std::string& path : pages) {
     const uint16_t len = static_cast<uint16_t>(path.size());
     if (index.write(&len, sizeof(len)) != sizeof(len) || index.write(path.data(), len) != len) {
-      writeOk = false;
-      return;
+      index.close();
+      return false;
     }
     ++pageCount_;
-  });
+  }
 
   index.close();
-  zip.close();
-  return enumerateOk && writeOk && pageCount_ > 0;
+  return pageCount_ > 0;
 }
 
 bool MangaArchive::loadIndex() {
@@ -146,7 +201,10 @@ bool MangaArchive::loadIndex() {
       file.close();
       return false;
     }
-    file.seekCur(len);
+    if (!file.seekCur(len)) {
+      file.close();
+      return false;
+    }
     ++pageCount_;
   }
   file.close();
@@ -187,7 +245,10 @@ bool MangaArchive::seekToPage(std::size_t index, std::string& path) {
       file.close();
       return false;
     }
-    file.seekCur(len);
+    if (!file.seekCur(len)) {
+      file.close();
+      return false;
+    }
   }
 
   uint16_t len = 0;
@@ -224,11 +285,20 @@ bool MangaArchive::getPage(std::size_t index, PageInfo& page) {
 
 bool MangaArchive::extractToFile(const std::string& entryPath, const std::string& outputPath) {
   ZipFile zip(archivePath_);
+  if (!zip.open()) {
+    LOG_ERR("MANGA", "Unable to reopen archive for page extraction: %s", archivePath_.c_str());
+    return false;
+  }
+
   HalFile output;
-  if (!Storage.openFileForWrite("MANGA", outputPath.c_str(), output)) return false;
+  if (!Storage.openFileForWrite("MANGA", outputPath.c_str(), output)) {
+    zip.close();
+    return false;
+  }
 
   const bool success = zip.readFileToStream(entryPath.c_str(), output, 4096);
   output.close();
+  zip.close();
   return success;
 }
 
@@ -258,8 +328,9 @@ bool MangaArchive::materializePage(std::size_t index, std::string& bmpPath, int 
   PageInfo page;
   if (!getPage(index, page)) return false;
 
-  char bmpName[48];
-  std::snprintf(bmpName, sizeof(bmpName), "/page_%06lu.bmp", static_cast<unsigned long>(index));
+  char bmpName[64];
+  std::snprintf(bmpName, sizeof(bmpName), "/page_%06lu_%04ux%04u.bmp", static_cast<unsigned long>(index),
+                static_cast<unsigned>(std::max(1, maxWidth)), static_cast<unsigned>(std::max(1, maxHeight)));
   bmpPath = cachePath_ + bmpName;
   if (Storage.exists(bmpPath.c_str())) return true;
 
