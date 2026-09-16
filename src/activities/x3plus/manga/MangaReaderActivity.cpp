@@ -10,6 +10,11 @@
 #include "fontIds.h"
 #include "manga/MangaArchive.h"
 #include "manga/MangaProgress.h"
+#include "manga/MangaSettings.h"
+
+namespace {
+constexpr char MANGA_SETTINGS_PATH[] = "/.crosspoint/x3plus/manga/settings.cfg";
+}
 
 void MangaReaderActivity::onEnter() {
   Activity::onEnter();
@@ -24,11 +29,7 @@ void MangaReaderActivity::onEnter() {
 
   progress = std::make_unique<MangaProgress>(archive->cachePath());
   uint32_t savedPage = 0;
-  if (progress->load(savedPage) && savedPage < archive->pageCount()) {
-    pageIndex = savedPage;
-  } else {
-    pageIndex = 0;
-  }
+  pageIndex = (progress->load(savedPage) && savedPage < archive->pageCount()) ? savedPage : 0;
 
   ready = true;
   error = false;
@@ -50,23 +51,19 @@ void MangaReaderActivity::saveProgress() {
 }
 
 void MangaReaderActivity::moveNext() {
-  if (!ready || archive->pageCount() == 0) return;
-  if (pageIndex + 1 < archive->pageCount()) {
-    ++pageIndex;
-    showControls = false;
-    saveProgress();
-    requestUpdate();
-  }
+  if (!ready || archive->pageCount() == 0 || pageIndex + 1 >= archive->pageCount()) return;
+  ++pageIndex;
+  showControls = false;
+  saveProgress();
+  requestUpdate();
 }
 
 void MangaReaderActivity::movePrevious() {
-  if (!ready || archive->pageCount() == 0) return;
-  if (pageIndex > 0) {
-    --pageIndex;
-    showControls = false;
-    saveProgress();
-    requestUpdate();
-  }
+  if (!ready || archive->pageCount() == 0 || pageIndex == 0) return;
+  --pageIndex;
+  showControls = false;
+  saveProgress();
+  requestUpdate();
 }
 
 void MangaReaderActivity::loop() {
@@ -75,20 +72,15 @@ void MangaReaderActivity::loop() {
     return;
   }
 
-  // PageForward / PageBack are the X3 page controls. The logical direction is
-  // controlled by the device input mapping, so the manga reader remains usable
-  // in portrait/landscape orientations.
+  const auto settings = X3Plus::MangaSettings::load(MANGA_SETTINGS_PATH);
   if (mappedInput.wasReleased(MappedInputManager::Button::PageForward)) {
-    moveNext();
+    settings.rtl ? movePrevious() : moveNext();
     return;
   }
-
   if (mappedInput.wasReleased(MappedInputManager::Button::PageBack)) {
-    movePrevious();
+    settings.rtl ? moveNext() : movePrevious();
     return;
   }
-
-  // Confirm toggles a minimal HUD containing page/progress information.
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     showControls = !showControls;
     requestUpdate();
@@ -100,7 +92,6 @@ bool MangaReaderActivity::renderCurrentPage() {
 
   const int screenWidth = renderer.getScreenWidth();
   const int screenHeight = renderer.getScreenHeight();
-
   if (!archive->materializePage(pageIndex, currentBmpPath, screenWidth, screenHeight)) {
     error = true;
     errorMessage = "Unable to decode page";
@@ -115,8 +106,7 @@ bool MangaReaderActivity::renderCurrentPage() {
   }
 
   Bitmap bitmap(file);
-  const auto parseResult = bitmap.parseHeaders();
-  if (parseResult != BmpReaderError::Ok) {
+  if (bitmap.parseHeaders() != BmpReaderError::Ok) {
     file.close();
     error = true;
     errorMessage = "Invalid decoded image";
@@ -125,13 +115,8 @@ bool MangaReaderActivity::renderCurrentPage() {
 
   const int imageWidth = bitmap.getWidth();
   const int imageHeight = bitmap.getHeight();
-
   renderer.clearScreen();
 
-  // The JPEG/PNG converter already generated a display-bounded image. For
-  // source BMPs or unusual aspect ratios, drawBitmap performs a second safety
-  // fit against the physical logical viewport. When the image is smaller than
-  // the viewport we center it for a clean manga reading surface.
   int x = 0;
   int y = 0;
   int maxWidth = screenWidth;
@@ -151,7 +136,6 @@ bool MangaReaderActivity::renderCurrentPage() {
     renderer.fillRect(0, 0, screenWidth, 24, false);
     renderer.drawText(SMALL_FONT_ID, 8, 5, title.c_str());
   }
-
   return true;
 }
 
@@ -165,11 +149,9 @@ void MangaReaderActivity::render(RenderLock&&) {
     renderer.displayBuffer();
     return;
   }
-
   if (!ready || !renderCurrentPage()) {
     renderer.clearScreen();
     renderer.drawCenteredText(UI_12_FONT_ID, renderer.getScreenHeight() / 2, "Loading...");
   }
-
   renderer.displayBuffer();
 }
