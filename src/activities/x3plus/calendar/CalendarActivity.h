@@ -13,9 +13,14 @@ class CalendarActivity final : public Activity {
   std::vector<X3Plus::CalendarEvent> events;
   int selectorIndex = 0;
   std::string sourcePath;
+  std::string syncUrl;
+  bool syncing = false;
+  std::string statusMessage;
 
   void loadEvents();
-  void openCalendarFile();
+  void loadSyncUrl();
+  bool fetchRemoteCalendar();
+  void configureSyncUrl();
   static std::string eventLabel(const X3Plus::CalendarEvent& event);
 
  public:
