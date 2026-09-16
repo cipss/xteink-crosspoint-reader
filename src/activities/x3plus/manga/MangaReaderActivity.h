@@ -24,6 +24,7 @@ class MangaReaderActivity final : public Activity {
   void moveNext();
   void movePrevious();
   void saveProgress();
+  void prefetchAdjacent();
   bool renderCurrentPage();
 
  public:
