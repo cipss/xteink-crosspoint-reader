@@ -19,15 +19,14 @@
 #include "settings/SettingsActivity.h"
 #include "util/FullScreenMessageActivity.h"
 #include "x3plus/X3PlusLauncherActivity.h"
+#include "x3plus/calendar/CalendarActivity.h"
 #include "x3plus/manga/MangaLibraryActivity.h"
 #include "x3plus/manga/MangaReaderActivity.h"
+#include "x3plus/notes/NotesActivity.h"
+#include "x3plus/weather/WeatherActivity.h"
 
 void ActivityManager::begin() {
-  xTaskCreate(&renderTaskTrampoline, "ActivityManagerRender",
-              8192,
-              this,
-              1,
-              &renderTaskHandle);
+  xTaskCreate(&renderTaskTrampoline, "ActivityManagerRender", 8192, this, 1, &renderTaskHandle);
   assert(renderTaskHandle != nullptr && "Failed to create render task");
 }
 
@@ -140,6 +139,18 @@ void ActivityManager::goToMangaLibrary() {
 
 void ActivityManager::goToMangaReader(std::string path) {
   replaceActivity(std::make_unique<MangaReaderActivity>(renderer, mappedInput, std::move(path)));
+}
+
+void ActivityManager::goToNotes() {
+  replaceActivity(std::make_unique<NotesActivity>(renderer, mappedInput));
+}
+
+void ActivityManager::goToCalendar() {
+  replaceActivity(std::make_unique<CalendarActivity>(renderer, mappedInput));
+}
+
+void ActivityManager::goToWeather() {
+  replaceActivity(std::make_unique<WeatherActivity>(renderer, mappedInput));
 }
 
 void ActivityManager::goToSettings() { replaceActivity(std::make_unique<SettingsActivity>(renderer, mappedInput)); }
