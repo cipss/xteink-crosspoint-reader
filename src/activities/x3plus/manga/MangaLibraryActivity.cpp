@@ -6,7 +6,8 @@
 #include <algorithm>
 
 #include "components/UITheme.h"
-#include "util/MappedInputManager.h"
+#include "manga/MangaArchive.h"
+#include "manga/MangaReaderActivity.h"
 
 namespace {
 constexpr char MANGA_ROOT[] = "/Manga";
@@ -49,7 +50,7 @@ void MangaLibraryActivity::loadManga() {
 void MangaLibraryActivity::openSelected() {
   if (mangaFiles.empty() || selectorIndex < 0 || selectorIndex >= static_cast<int>(mangaFiles.size())) return;
   activityManager.pushActivity(
-      std::make_unique<class MangaReaderActivity>(renderer, mappedInput, mangaFiles[selectorIndex]));
+      std::make_unique<MangaReaderActivity>(renderer, mappedInput, mangaFiles[selectorIndex]));
 }
 
 void MangaLibraryActivity::onEnter() {
@@ -110,7 +111,8 @@ void MangaLibraryActivity::render(RenderLock&&) {
     GUI.drawPopup(renderer, "Scanning Manga...");
   } else if (mangaFiles.empty()) {
     renderer.drawCenteredText(UI_12_FONT_ID, content.y + content.height / 2, "Nessun manga trovato");
-    renderer.drawCenteredText(UI_10_FONT_ID, content.y + content.height / 2 + 28, "Inserisci CBZ/ZIP nella cartella /Manga");
+    renderer.drawCenteredText(UI_10_FONT_ID, content.y + content.height / 2 + 28,
+                              "Inserisci CBZ/ZIP nella cartella /Manga");
   } else {
     GUI.drawList(
         renderer, content, static_cast<int>(mangaFiles.size()), selectorIndex,
