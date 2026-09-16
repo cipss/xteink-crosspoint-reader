@@ -30,10 +30,12 @@ uint32_t fnv1a(const std::string& value) {
 }
 
 bool extensionEquals(const std::string& path, const char* ext) {
-  if (path.size() < std::strlen(ext)) return false;
-  auto pos = path.size() - std::strlen(ext);
-  for (size_t i = 0; i < std::strlen(ext); ++i) {
-    if (std::tolower(static_cast<unsigned char>(path[pos + i])) != std::tolower(static_cast<unsigned char>(ext[i]))) {
+  const std::size_t extLen = std::strlen(ext);
+  if (path.size() < extLen) return false;
+  const std::size_t pos = path.size() - extLen;
+  for (std::size_t i = 0; i < extLen; ++i) {
+    if (std::tolower(static_cast<unsigned char>(path[pos + i])) !=
+        std::tolower(static_cast<unsigned char>(ext[i]))) {
       return false;
     }
   }
@@ -46,8 +48,16 @@ MangaArchive::MangaArchive(std::string archivePath) : archivePath_(std::move(arc
 MangaArchive::~MangaArchive() { close(); }
 
 std::string MangaArchive::cacheKey(const std::string& path) {
+  uint32_t hash = fnv1a(path);
+  auto file = Storage.open(path.c_str());
+  if (file) {
+    hash ^= static_cast<uint32_t>(file.size());
+    hash *= FNV_PRIME;
+    file.close();
+  }
+
   char buf[32];
-  std::snprintf(buf, sizeof(buf), "%08x", fnv1a(path));
+  std::snprintf(buf, sizeof(buf), "%08x", hash);
   return std::string(CACHE_ROOT) + "/" + buf;
 }
 
@@ -55,8 +65,11 @@ std::string MangaArchive::extensionOf(const std::string& path) {
   const auto slash = path.find_last_of('/');
   const auto dot = path.find_last_of('.');
   if (dot == std::string::npos || (slash != std::string::npos && dot < slash)) return {};
+
   std::string ext = path.substr(dot);
-  std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) {
+    return static_cast<char>(std::tolower(c));
+  });
   return ext;
 }
 
@@ -99,20 +112,24 @@ bool MangaArchive::buildIndex() {
   }
 
   pageCount_ = 0;
-  const bool ok = zip.enumerateFilePaths([&](std::string_view filePath) {
-    if (filePath.empty() || filePath.back() == '/' || filePath.size() > MAX_ENTRY_PATH) return;
+  bool writeOk = true;
+  const bool enumerateOk = zip.enumerateFilePaths([&](std::string_view filePath) {
+    if (!writeOk || filePath.empty() || filePath.back() == '/' || filePath.size() > MAX_ENTRY_PATH) return;
+
     const std::string path(filePath);
     if (!isImagePath(path)) return;
 
     const uint16_t len = static_cast<uint16_t>(path.size());
-    if (index.write(&len, sizeof(len)) != sizeof(len)) return;
-    if (index.write(path.data(), len) != len) return;
+    if (index.write(&len, sizeof(len)) != sizeof(len) || index.write(path.data(), len) != len) {
+      writeOk = false;
+      return;
+    }
     ++pageCount_;
   });
 
   index.close();
   zip.close();
-  return ok && pageCount_ > 0;
+  return enumerateOk && writeOk && pageCount_ > 0;
 }
 
 bool MangaArchive::loadIndex() {
@@ -129,10 +146,7 @@ bool MangaArchive::loadIndex() {
       file.close();
       return false;
     }
-    if (!file.seekCur(len)) {
-      file.close();
-      return false;
-    }
+    file.seekCur(len);
     ++pageCount_;
   }
   file.close();
@@ -157,6 +171,7 @@ void MangaArchive::close() {
   if (indexFile_) indexFile_.close();
   open_ = false;
   cursorValid_ = false;
+  cursorIndex_ = 0;
 }
 
 bool MangaArchive::seekToPage(std::size_t index, std::string& path) {
@@ -166,24 +181,13 @@ bool MangaArchive::seekToPage(std::size_t index, std::string& path) {
   HalFile file;
   if (!Storage.openFileForRead("MANGA", indexPath.c_str(), file)) return false;
 
-  if (cursorValid_ && index >= cursorIndex_) {
-    // Sequential access is common in the reader. Still reopen for the actual page so
-    // a failed render never leaves the index cursor in an ambiguous state.
-    for (std::size_t i = 0; i < index; ++i) {
-      uint16_t len = 0;
-      if (file.read(&len, sizeof(len)) != sizeof(len) || !file.seekCur(len)) {
-        file.close();
-        return false;
-      }
+  for (std::size_t i = 0; i < index; ++i) {
+    uint16_t len = 0;
+    if (file.read(&len, sizeof(len)) != sizeof(len) || len == 0 || len > MAX_ENTRY_PATH) {
+      file.close();
+      return false;
     }
-  } else {
-    for (std::size_t i = 0; i < index; ++i) {
-      uint16_t len = 0;
-      if (file.read(&len, sizeof(len)) != sizeof(len) || !file.seekCur(len)) {
-        file.close();
-        return false;
-      }
-    }
+    file.seekCur(len);
   }
 
   uint16_t len = 0;
@@ -192,12 +196,13 @@ bool MangaArchive::seekToPage(std::size_t index, std::string& path) {
     return false;
   }
 
-  std::unique_ptr<char[]> buffer = makeUniqueNoThrow<char[]>(static_cast<size_t>(len) + 1);
+  std::unique_ptr<char[]> buffer = makeUniqueNoThrow<char[]>(static_cast<std::size_t>(len) + 1);
   if (!buffer) {
     LOG_ERR("MANGA", "OOM reading page index");
     file.close();
     return false;
   }
+
   if (file.read(buffer.get(), len) != len) {
     file.close();
     return false;
@@ -219,13 +224,10 @@ bool MangaArchive::getPage(std::size_t index, PageInfo& page) {
 
 bool MangaArchive::extractToFile(const std::string& entryPath, const std::string& outputPath) {
   ZipFile zip(archivePath_);
-  if (!zip.readFileToStream(entryPath.c_str(), *([]() -> Print* { return nullptr; })(), 1024)) {
-    // The lambda is intentionally unreachable; use the concrete HalFile below.
-  }
-
   HalFile output;
   if (!Storage.openFileForWrite("MANGA", outputPath.c_str(), output)) return false;
-  const bool success = zip.readFileToStream(entryPath.c_str(), output, 1024);
+
+  const bool success = zip.readFileToStream(entryPath.c_str(), output, 4096);
   output.close();
   return success;
 }
@@ -245,8 +247,6 @@ bool MangaArchive::convertImageToBmp(const std::string& inputPath, const std::st
     success = JpegToBmpConverter::jpegFileToBmpStreamWithSize(input, output, maxWidth, maxHeight);
   } else if (extension == ".png") {
     success = PngToBmpConverter::pngFileToBmpStreamWithSize(input, output, maxWidth, maxHeight);
-  } else if (extension == ".bmp") {
-    success = false;
   }
 
   input.close();
@@ -272,11 +272,7 @@ bool MangaArchive::materializePage(std::size_t index, std::string& bmpPath, int 
 
   bool success = false;
   if (page.extension == ".bmp") {
-    // A BMP may already be the correct format. Copying through the zip stream is enough;
-    // the renderer will fit it to the display at draw time.
-    if (Storage.rename(inputPath.c_str(), bmpPath.c_str())) {
-      success = true;
-    }
+    success = Storage.rename(inputPath.c_str(), bmpPath.c_str());
   } else {
     success = convertImageToBmp(inputPath, page.extension, bmpPath, maxWidth, maxHeight);
     Storage.remove(inputPath.c_str());
