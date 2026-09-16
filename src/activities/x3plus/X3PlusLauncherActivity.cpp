@@ -7,22 +7,14 @@ namespace {
 
 UIIcon iconForApp(X3Plus::AppId id) {
   switch (id) {
-    case X3Plus::AppId::Manga:
-      return Book;
-    case X3Plus::AppId::Notes:
-      return Text;
-    case X3Plus::AppId::Weather:
-      return Wifi;
-    case X3Plus::AppId::Calendar:
-      return Library;
-    case X3Plus::AppId::Rss:
-      return Text;
-    case X3Plus::AppId::Browser:
-      return Text;
-    case X3Plus::AppId::Games:
-      return Book;
-    case X3Plus::AppId::Settings:
-      return Settings;
+    case X3Plus::AppId::Manga: return Book;
+    case X3Plus::AppId::Notes: return Text;
+    case X3Plus::AppId::Weather: return Wifi;
+    case X3Plus::AppId::Calendar: return Library;
+    case X3Plus::AppId::Rss: return Text;
+    case X3Plus::AppId::Browser: return Text;
+    case X3Plus::AppId::Games: return Book;
+    case X3Plus::AppId::Settings: return Settings;
   }
   return None;
 }
@@ -48,19 +40,26 @@ void X3PlusLauncherActivity::selectApp() {
   const auto count = X3Plus::appCount();
   if (selectorIndex < 0 || static_cast<std::size_t>(selectorIndex) >= count) return;
 
-  const auto id = appList[selectorIndex].id;
-  switch (id) {
+  switch (appList[selectorIndex].id) {
     case X3Plus::AppId::Manga:
       activityManager.goToMangaLibrary();
+      return;
+    case X3Plus::AppId::Notes:
+      activityManager.goToNotes();
+      return;
+    case X3Plus::AppId::Weather:
+      activityManager.goToWeather();
+      return;
+    case X3Plus::AppId::Calendar:
+      activityManager.goToCalendar();
       return;
     case X3Plus::AppId::Settings:
       activityManager.goToSettings();
       return;
     default:
-      break;
+      showPlaceholderFor(appList[selectorIndex].title);
+      return;
   }
-
-  showPlaceholderFor(appList[selectorIndex].title);
 }
 
 void X3PlusLauncherActivity::loop() {
@@ -83,9 +82,7 @@ void X3PlusLauncherActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    selectApp();
-  }
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) selectApp();
 }
 
 void X3PlusLauncherActivity::render(RenderLock&&) {
@@ -98,7 +95,6 @@ void X3PlusLauncherActivity::render(RenderLock&&) {
 
   const auto* appList = X3Plus::apps();
   const auto count = X3Plus::appCount();
-
   const Rect listRect{
       0,
       metrics.topPadding + metrics.headerHeight,
@@ -107,10 +103,7 @@ void X3PlusLauncherActivity::render(RenderLock&&) {
   };
 
   GUI.drawList(
-      renderer,
-      listRect,
-      static_cast<int>(count),
-      selectorIndex,
+      renderer, listRect, static_cast<int>(count), selectorIndex,
       [appList](int index) { return std::string(appList[index].title); },
       [appList](int index) { return std::string(appList[index].description); },
       [appList](int index) { return iconForApp(appList[index].id); });
