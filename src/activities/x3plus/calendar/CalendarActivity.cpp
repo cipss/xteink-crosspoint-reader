@@ -8,6 +8,7 @@
 #include <Memory.h>
 
 #include <algorithm>
+#include <memory>
 
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
@@ -18,6 +19,12 @@ constexpr char CALENDAR_ROOT[] = "/Calendar";
 constexpr char SYNC_URL_FILE[] = "/.crosspoint/x3plus/calendar.url";
 constexpr char SYNC_CACHE_FILE[] = "/Calendar/remote.ics";
 constexpr size_t MAX_ICS_BYTES = 96 * 1024;
+
+std::string normalizeCalendarUrl(std::string url) {
+  if (url.rfind("webcal://", 0) == 0) return "https://" + url.substr(9);
+  if (url.rfind("webcals://", 0) == 0) return "https://" + url.substr(10);
+  return url;
+}
 }
 
 std::string CalendarActivity::eventLabel(const X3Plus::CalendarEvent& event) {
@@ -40,17 +47,24 @@ void CalendarActivity::loadSyncUrl() {
   if (read == 0) return;
   buf[read] = '\0';
   syncUrl.assign(buf.get(), read);
-  while (!syncUrl.empty() && (syncUrl.back() == '\r' || syncUrl.back() == '\n' || syncUrl.back() == ' ')) syncUrl.pop_back();
+  while (!syncUrl.empty() && (syncUrl.back() == '\r' || syncUrl.back() == '\n' || syncUrl.back() == ' ' || syncUrl.back() == '\t')) {
+    syncUrl.pop_back();
+  }
+  syncUrl = normalizeCalendarUrl(syncUrl);
 }
 
 bool CalendarActivity::fetchRemoteCalendar() {
   if (syncUrl.empty() || WiFi.status() != WL_CONNECTED) return false;
+
+  const std::string url = normalizeCalendarUrl(syncUrl);
+  if (url.rfind("https://", 0) != 0 && url.rfind("http://", 0) != 0) return false;
+
   HTTPClient http;
   http.setTimeout(10000);
   int code = 0;
   WiFiClientSecure client;
   client.setInsecure();
-  if (!http.begin(client, syncUrl.c_str())) return false;
+  if (!http.begin(client, url.c_str())) return false;
   code = http.GET();
   if (code != HTTP_CODE_OK) {
     http.end();
@@ -128,7 +142,7 @@ void CalendarActivity::configureSyncUrl() {
         if (result.isCancelled) return;
         const auto* keyboard = std::get_if<KeyboardResult>(&result.data);
         if (!keyboard) return;
-        syncUrl = keyboard->text;
+        syncUrl = normalizeCalendarUrl(keyboard->text);
         HalFile file;
         if (Storage.openFileForWrite("CAL", SYNC_URL_FILE, file)) {
           file.write(syncUrl.data(), syncUrl.size());
