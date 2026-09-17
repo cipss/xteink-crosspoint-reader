@@ -1,6 +1,7 @@
 name: CI (build)
 
 on:
+  workflow_dispatch:
   push:
     branches: [master, x3plus-os]
   pull_request:
@@ -106,8 +107,6 @@ jobs:
           set -euo pipefail
           ram_line="$(grep -E "RAM:\\s" -m1 pio.log || true)"
           flash_line="$(grep -E "Flash:\\s" -m1 pio.log || true)"
-          echo "ram_line=${ram_line}" >> "$GITHUB_OUTPUT"
-          echo "flash_line=${flash_line}" >> "$GITHUB_OUTPUT"
           {
             echo "## Firmware build stats"
             if [ -n "$ram_line" ]; then echo "- ${ram_line}"; else echo "- RAM: not found"; fi
