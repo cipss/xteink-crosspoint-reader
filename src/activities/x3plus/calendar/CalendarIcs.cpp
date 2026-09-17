@@ -7,24 +7,24 @@ namespace X3Plus {
 void CalendarIcs::unfold(const std::string& input, std::string& output) {
   output.clear();
   std::size_t pos = 0;
+  bool haveLine = false;
   while (pos < input.size()) {
     const auto eol = input.find('\n', pos);
     const auto end = eol == std::string::npos ? input.size() : eol;
     std::string line = input.substr(pos, end - pos);
     if (!line.empty() && line.back() == '\r') line.pop_back();
 
-    if (!line.empty() && (line[0] == ' ' || line[0] == '\t') && !output.empty()) {
-      const auto previousEol = output.find_last_of('\n');
-      if (previousEol != std::string::npos) {
-        output.erase(previousEol + 1);
-        output += line.substr(1);
-      } else {
-        output += line.substr(1);
-      }
+    if (!line.empty() && (line[0] == ' ' || line[0] == '\t') && haveLine) {
+      // RFC 5545 folding: remove the CRLF/LF separator and the leading WSP.
+      if (!output.empty() && output.back() == '\n') output.pop_back();
+      output += line.substr(1);
+      output.push_back('\n');
     } else {
       output += line;
       output.push_back('\n');
+      haveLine = true;
     }
+
     pos = eol == std::string::npos ? input.size() : eol + 1;
   }
 }
